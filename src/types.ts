@@ -1,4 +1,10 @@
-export type PaperStatus = '规划中' | '撰写中' | '准备投稿' | '已投出' | '审稿中' | '大修' | '小修' | '已录用' | '被拒稿';
+export type PaperStatus = '规划中' | '撰写中' | '准备投稿' | '已投出' | '审稿中' | '大修' | '小修' | '已录用' | '被拒稿' | '录用' | '拒稿' | '其他';
+
+export interface SubmissionEvent {
+  id: string;
+  date: string;
+  status: string;
+}
 
 export interface PaperSubmission {
   id: string;
@@ -8,6 +14,8 @@ export interface PaperSubmission {
   note: string;
   underReviewDate?: string;
   revisionDate?: string;
+  acceptDate?: string;
+  events?: SubmissionEvent[];
 }
 
 export interface Paper {

@@ -13,7 +13,7 @@ export const ALL_TABS_CONFIG = [
   { id: 'plan', label: '科研计划', icon: ClipboardList },
   { id: 'time', label: '时光足迹', icon: Clock },
   { id: 'fitness', label: '运动记录', icon: Dumbbell },
-  { id: 'papers', label: '论文进度', icon: Folder },
+  { id: 'papers', label: '论文进展', icon: Folder },
   { id: 'journal', label: '日常随想', icon: BookOpen },
   { id: 'achievements', label: '小小成就', icon: Trophy },
 ];

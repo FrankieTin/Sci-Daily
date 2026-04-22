@@ -50,6 +50,7 @@ export default function PaperProgress() {
   // Accepted Modal State
   const [acceptedPaperInfo, setAcceptedPaperInfo] = useState<{id: string, title: string, venue: string} | null>(null);
   const [reflection, setReflection] = useState('');
+  const [customStatusInput, setCustomStatusInput] = useState<{paperId: string, subId: string, value: string} | null>(null);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -76,22 +77,56 @@ export default function PaperProgress() {
   };
 
   const startReview = (paperId: string, subId: string) => {
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const newSubs = paper.submissions.map(s => s.id === subId ? { ...s, status: '审稿中' as PaperStatus, underReviewDate: s.underReviewDate || today } : s);
-    updatePaper(paperId, { status: '审稿中', submissions: newSubs });
-    setActiveTab('review');
-    setExpandedRevId(paperId);
-  };
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const newSubs = paper.submissions.map(s => {
+    if (s.id === subId) {
+      const events = s.events || [];
+      if (!events.some(e => e.status === '投递')) {
+         events.unshift({ id: uuidv4(), date: s.submitDate || today, status: '投递' });
+      }
+      return {
+        ...s, 
+        status: '审稿中' as PaperStatus, 
+        underReviewDate: s.underReviewDate || today,
+        events: [...events, { id: uuidv4(), date: today, status: '外审' }]
+      };
+    }
+    return s;
+  });
+  
+  let overall = paper.status;
+  if (['规划中', '撰写中', '准备投稿', '已投出'].includes(overall)) {
+     overall = '审稿中';
+  }
+  updatePaper(paperId, { status: overall, submissions: newSubs });
+  setActiveTab('review');
+  setExpandedRevId(paperId);
+};
 
   const markAsRejected = (paperId: string, subId: string) => {
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-    const newSubs = paper.submissions.map(s => s.id === subId ? { ...s, status: '被拒稿' as PaperStatus } : s);
-    // Keep paper in "Ready for Submission" state so it can be re-submitted
-    updatePaper(paperId, { status: '准备投稿', submissions: newSubs });
-  };
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const newSubs = paper.submissions.map(s => {
+    if (s.id === subId) {
+       return {
+         ...s, 
+         status: '拒稿' as PaperStatus,
+         events: [...(s.events || []), { id: uuidv4(), date: today, status: '拒稿' }]
+       };
+    }
+    return s;
+  });
+  const hasReview = newSubs.some(s => !['已投出', '录用', '已录用', '拒稿', '被拒稿'].includes(s.status as any));
+  const hasAccepted = newSubs.some(s => s.status === '录用' || s.status === '已录用');
+  let overall = paper.status;
+  if (hasAccepted) overall = '已录用';
+  else if (hasReview) overall = '审稿中';
+  else overall = '已投出';
+  updatePaper(paperId, { status: overall, submissions: newSubs });
+};
 
   const handleCreate = () => {
     setIsAdding(true);
@@ -107,21 +142,27 @@ export default function PaperProgress() {
   };
 
   const addSubmissionToPaper = (paperId: string) => {
-    if (!subVenue || !subDate) return;
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-    
-    const newSub = {
-      id: uuidv4(),
-      venue: subVenue,
-      submitDate: subDate,
-      status: '已投出' as PaperStatus,
-      note: ''
-    };
-    
-    updatePaper(paperId, { status: '已投出', submissions: [...(paper.submissions||[]), newSub] });
-    setAddingSubId(null); setSubVenue(''); setSubDate('');
+  if (!subVenue || !subDate) return;
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  
+  const newSub = {
+    id: uuidv4(),
+    venue: subVenue,
+    submitDate: subDate,
+    status: '已投出' as PaperStatus,
+    note: '',
+    events: [{ id: uuidv4(), date: subDate, status: '投递' }]
   };
+  
+  let newOverallStatus = paper.status;
+  if (['规划中', '撰写中', '准备投稿'].includes(paper.status)) {
+      newOverallStatus = '已投出';
+  }
+  
+  updatePaper(paperId, { status: newOverallStatus, submissions: [...(paper.submissions||[]), newSub] });
+  setAddingSubId(null); setSubVenue(''); setSubDate('');
+};
 
   const updateSubNote = (paperId: string, subId: string, note: string) => {
     const paper = papers.find(p => p.id === paperId);
@@ -130,36 +171,74 @@ export default function PaperProgress() {
     updatePaper(paperId, { submissions: newSubs });
   };
 
-  const updateSubField = (paperId: string, subId: string, field: 'submitDate'|'underReviewDate'|'revisionDate', val: string) => {
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-    const newSubs = paper.submissions.map(s => s.id === subId ? { ...s, [field]: val } : s);
-    updatePaper(paperId, { submissions: newSubs });
-  };
+  const updateSubField = (paperId: string, subId: string, field: 'submitDate'|'underReviewDate'|'revisionDate'|'acceptDate'|'venue', val: string) => {
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const newSubs = paper.submissions.map(s => s.id === subId ? { ...s, [field]: val } : s);
+  updatePaper(paperId, { submissions: newSubs });
+};
+
+const deleteSubmissionEvent = (paperId: string, subId: string, eventId: string) => {
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const newSubs = paper.submissions.map(s => {
+    if (s.id === subId && s.events) {
+      return { ...s, events: s.events.filter(e => e.id !== eventId) };
+    }
+    return s;
+  });
+  updatePaper(paperId, { submissions: newSubs });
+};
+
+const updateSubmissionEventDate = (paperId: string, subId: string, eventId: string, newDate: string) => {
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const newSubs = paper.submissions.map(s => {
+    if (s.id === subId && s.events) {
+      return { ...s, events: s.events.map(e => e.id === eventId ? { ...e, date: newDate } : e) };
+    }
+    return s;
+  });
+  updatePaper(paperId, { submissions: newSubs });
+};
   
   const finishReviewStatus = (paperId: string, subId: string, finalStatus: PaperStatus) => {
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const newSubs = paper.submissions.map(s => {
-      if (s.id === subId) {
-        const updated = { ...s, status: finalStatus };
-        if (finalStatus === '大修' || finalStatus === '小修') {
-           updated.revisionDate = s.revisionDate || today;
-        }
-        return updated;
+  const paper = papers.find(p => p.id === paperId);
+  if (!paper) return;
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const newSubs = paper.submissions.map(s => {
+    if (s.id === subId) {
+      const events = s.events || [];
+      if (!events.some(e => e.status === '投递')) {
+         events.unshift({ id: uuidv4(), date: s.submitDate || today, status: '投递' });
       }
-      return s;
-    });
-    
-    if (finalStatus === '已录用') {
-      const sub = paper.submissions.find(x => x.id === subId);
-      setAcceptedPaperInfo({ id: paperId, title: paper.title, venue: sub?.venue || paper.targetVenue });
-      setActiveTab('published');
+      const updated = { ...s, status: finalStatus, events: [...events, { id: uuidv4(), date: today, status: finalStatus }] };
+      if (finalStatus === '大修' || finalStatus === '小修') {
+         updated.revisionDate = s.revisionDate || today;
+      }
+      if (finalStatus === '录用' || finalStatus === '已录用') {
+         updated.acceptDate = s.acceptDate || today;
+      }
+      return updated;
     }
-    
-    updatePaper(paperId, { status: finalStatus, submissions: newSubs });
-  };
+    return s;
+  });
+  
+  let overallStatus = paper.status;
+  const hasAccepted = newSubs.some(s => s.status === '录用' || s.status === '已录用');
+  const hasReview = newSubs.some(s => !['已投出', '录用', '已录用', '拒稿', '被拒稿'].includes(s.status as any));
+  if (hasAccepted) overallStatus = '已录用';
+  else if (hasReview) overallStatus = '审稿中';
+  else overallStatus = '已投出';
+  
+  if (finalStatus === '录用' || finalStatus === '已录用') {
+    const sub = newSubs.find(x => x.id === subId);
+    setAcceptedPaperInfo({ id: paperId, title: paper.title, venue: sub?.venue || paper.targetVenue });
+    setActiveTab('published');
+  }
+  
+  updatePaper(paperId, { status: hasAccepted ? '已录用' : overallStatus, submissions: newSubs });
+};
 
   const handleConfirmAcceptance = () => {
     if (!acceptedPaperInfo) return;
@@ -176,15 +255,15 @@ export default function PaperProgress() {
 
     addAchievement({
       dateString: format(new Date(), 'yyyy-MM-dd'),
-      title: `论文录用: ${acceptedPaperInfo.title}`,
-      description: `发表于 ${acceptedPaperInfo.venue}`,
+      title: acceptedPaperInfo.title,
+      description: acceptedPaperInfo.venue,
       category: '已发论文',
       otherNote: historyStr,
       reflection: reflection
     });
     setAcceptedPaperInfo(null);
     setReflection('');
-    setActiveTab('writing'); 
+    setActiveTab('published'); 
   };
 
   const renderPaperStatusBadge = (s: PaperStatus) => {
@@ -194,8 +273,9 @@ export default function PaperProgress() {
     if (s === '已投出') return <span className="bg-[#FAF8F6] border border-sage/40 text-sage px-2 py-0.5 rounded-[6px] text-[11px] font-bold">已投出 ⏳</span>;
     if (s === '审稿中') return <span className="bg-orange-50/50 border border-orange-100 text-[#d97706] px-2 py-0.5 rounded-[6px] text-[11px] font-bold">审稿中 📬</span>;
     if (s === '大修' || s === '小修') return <span className="bg-[#FAF8F6] border border-terracotta/40 text-terracotta px-2 py-0.5 rounded-[6px] text-[11px] font-bold">返修中 R&R</span>;
-    if (s === '已录用') return <span className="bg-sage text-white px-2 py-0.5 rounded-[6px] text-[11px] font-bold shadow-sm">🎊 已录用</span>;
-    if (s === '被拒稿') return <span className="bg-[#FAF8F6] border border-text-muted/40 text-text-muted px-2 py-0.5 rounded-[6px] text-[11px] font-bold">已拒稿</span>;
+    if (s === '已录用' || s === '录用') return <span className="bg-sage text-white px-2 py-0.5 rounded-[6px] text-[11px] font-bold shadow-sm">🎊 已录用</span>;
+    if (s === '被拒稿' || s === '拒稿') return <span className="bg-[#FAF8F6] border border-text-muted/40 text-text-muted px-2 py-0.5 rounded-[6px] text-[11px] font-bold">已拒稿</span>;
+    if (s === '其他' || s === '其他') return <span className="bg-purple-50 border border-purple-100 text-purple-600 px-2 py-0.5 rounded-[6px] text-[11px] font-bold">其他状态</span>;
     return <span className="bg-line/30 text-text-muted px-2 py-0.5 rounded-[6px] text-[11px] font-bold">{s}</span>;
   };
 
@@ -403,6 +483,7 @@ export default function PaperProgress() {
                             <button 
                               onClick={(e) => { e.stopPropagation(); deleteSubmission(paper.id, sub.id); }}
                               className="absolute top-2 right-2 p-1 text-text-muted hover:text-terracotta opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="删除记录"
                             >
                               <X size={14} />
                             </button>
@@ -410,7 +491,12 @@ export default function PaperProgress() {
                               <input type="date" value={sub.submitDate} onChange={e => updateSubField(paper.id, sub.id, 'submitDate', e.target.value)} className="bg-transparent outline-none cursor-pointer" />
                             </div>
                             <div className="flex-1 flex flex-col md:flex-row md:items-center gap-3">
-                               <span className="font-bold text-[14px] text-text-main pr-6">{sub.venue}</span>
+                               <input 
+                                 type="text" 
+                                 value={sub.venue || ''} 
+                                 onChange={e => updateSubField(paper.id, sub.id, 'venue', e.target.value)} 
+                                 className="font-bold text-[14px] text-text-main bg-transparent outline-none hover:bg-black/5 rounded cursor-text w-full max-w-[200px]" 
+                               />
                                <div className="flex gap-2">
                                  {renderPaperStatusBadge(sub.status)}
                                  {sub.status === '已投出' && (
@@ -425,7 +511,7 @@ export default function PaperProgress() {
                                       onClick={(e) => { e.stopPropagation(); markAsRejected(paper.id, sub.id); }} 
                                       className="text-[11px] bg-card border border-text-muted/30 text-text-muted px-2.5 py-1 rounded-[6px] font-bold hover:bg-text-muted hover:text-white transition-all flex items-center gap-1 shadow-sm"
                                      >
-                                       <X size={10} /> 被拒稿
+                                       <X size={10} /> 拒稿
                                      </button>
                                    </div>
                                  )}
@@ -466,20 +552,23 @@ export default function PaperProgress() {
       {/* Render Review Tab */}
       {activeTab === 'review' && (
         <div className="space-y-4">
-           {papers.filter(p => p.status !== '已录用' && !['规划中', '撰写中', '准备投稿', '已投出'].includes(p.status)).map(paper => (
+           {papers.filter(p => p.status !== '已录用' && (p.submissions?.some(s => !['已投出', '录用', '已录用', '拒稿', '被拒稿'].includes(s.status as any)))).map(paper => (
               <div key={paper.id} className="paper-card bg-card border border-line rounded-card overflow-hidden shadow-sm">
                  <div 
                    onClick={() => setExpandedRevId(expandedRevId === paper.id ? null : paper.id)}
                    className="bg-[#FDF4F0] border-b border-[#F5E6E0] px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-[#F9EBE5] transition-colors"
                  >
                    <div className="flex items-center gap-3">
-                     <Edit3 size={16} className="text-terracotta" />
+                     <Send size={16} className="text-terracotta" />
                      <h3 className="font-serif font-bold text-text-main text-[16px]">{paper.title}</h3>
                    </div>
                    <div className="flex items-center gap-4">
                      {renderPaperStatusBadge(paper.status)}
+                     <button onClick={(e) => { e.stopPropagation(); deletePaper(paper.id); }} className="text-text-muted hover:text-terracotta transition-colors p-1" title="删除文章记录">
+                       <X size={16} />
+                     </button>
                      <div className={`transition-transform duration-300 ${expandedRevId === paper.id ? 'rotate-180' : ''}`}>
-                       <Plus size={16} className="text-text-muted rotate-45" />
+                       <ChevronDown size={18} className="text-text-muted" />
                      </div>
                    </div>
                  </div>
@@ -487,58 +576,102 @@ export default function PaperProgress() {
                  {expandedRevId === paper.id && (
                    <div className="p-6 animate-in slide-in-from-top-2 duration-300" onClick={e => e.stopPropagation()}>
                     {(() => {
-                        const reviewSubs = paper.submissions?.filter(s => ['审稿中', '大修', '小修', '已投出'].includes(s.status)) || [];
+                        const reviewSubs = paper.submissions?.filter(s => !['已投出', '录用', '已录用', '拒稿', '被拒稿'].includes(s.status as any)) || [];
                         if (reviewSubs.length === 0) return <p className="text-[13px] text-text-muted italic text-center py-4">暂无审核阶段的记录。可以到“投稿”模块更新状态为“进入外审”。</p>;
                         
                         return (
-                          <div className="space-y-8">
+                          <div className="space-y-6">
                             {reviewSubs.map((sub, idx) => (
                               <div key={sub.id} className={`${idx !== 0 ? 'pt-8 border-t border-dashed border-line' : ''}`}>
-                                <div className="flex flex-wrap items-center justify-between gap-4 mb-4 border-b border-[#ebdacc] pb-4">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                     <div className="text-[13px] text-text-muted">
-                                       在 <span className="font-mono font-bold text-terracotta">{sub.venue}</span> 投递 
-                                       <input type="date" value={sub.submitDate} onChange={e => updateSubField(paper.id, sub.id, 'submitDate', e.target.value)} className="bg-transparent font-mono font-bold hover:bg-black/5 rounded outline-none p-0.5 cursor-pointer ml-1" />
+                                <div className="flex flex-wrap items-start justify-between gap-4 mb-4 border-b border-[#ebdacc] pb-2">
+                                  <div>
+                                     <div className="text-[14px] font-bold text-text-main flex items-center flex-wrap gap-2 mb-1">
+                                       <span className="text-[14px] whitespace-nowrap">期刊：</span> 
+                                       <input 
+                                         type="text" 
+                                         value={sub.venue || ''} 
+                                         onChange={e => updateSubField(paper.id, sub.id, 'venue', e.target.value)} 
+                                         className="font-mono text-terracotta bg-transparent outline-none hover:bg-black/5 rounded cursor-text w-[150px]" 
+                                       /> 
                                      </div>
-                                     {(sub.underReviewDate || ['审稿中', '大修', '小修', '已录用', '被拒稿'].includes(sub.status)) && (
-                                        <div className="text-[13px] text-text-muted flex items-center gap-1">
-                                          | 外审: <input type="date" value={sub.underReviewDate || ''} onChange={(e) => updateSubField(paper.id, sub.id, 'underReviewDate', e.target.value)} className="bg-transparent font-mono font-bold hover:bg-black/5 rounded outline-none p-0.5 cursor-pointer w-[125px]" />
-                                        </div>
-                                     )}
-                                     {(sub.revisionDate || ['大修', '小修'].includes(sub.status)) && (
-                                        <div className="text-[13px] text-text-muted flex items-center gap-1">
-                                          | 返修: <input type="date" value={sub.revisionDate || ''} onChange={(e) => updateSubField(paper.id, sub.id, 'revisionDate', e.target.value)} className="bg-transparent font-mono font-bold hover:bg-black/5 rounded outline-none p-0.5 cursor-pointer w-[125px]" />
-                                        </div>
-                                     )}
+                                     <div className="text-[12px] text-text-muted font-bold">时间线</div>
                                   </div>
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); deleteSubmission(paper.id, sub.id); }}
-                                    className="text-text-muted hover:text-terracotta transition-colors flex items-center gap-1 text-[12px] font-bold"
-                                  >
-                                    <X size={14} /> 没投这 / 删记录
+                                  <button onClick={(e) => { e.stopPropagation(); deleteSubmission(paper.id, sub.id); }} className="text-text-muted hover:text-terracotta p-1" title="删除记录">
+                                    <X size={16} />
                                   </button>
                                 </div>
-                                <textarea 
-                                  value={sub.note || ''} onChange={e => updateSubNote(paper.id, sub.id, e.target.value)}
-                                  placeholder="记录审稿人意见、返修改动等信息..."
-                                  className="w-full h-24 bg-base border border-[#ebdacc] rounded-[12px] p-3 text-[14px] outline-none focus:border-terracotta font-serif leading-relaxed mb-4 resize-none shadow-inner"
-                                />
-                                <div className="flex flex-wrap gap-2">
-                                  <span className="text-[12px] font-bold text-text-muted flex items-center mr-2">更新状态:</span>
-                                  {['审稿中', '大修', '小修', '已录用', '被拒稿'].map((s: any) => (
-                                    <button 
-                                       key={s} onClick={() => finishReviewStatus(paper.id, sub.id, s)}
-                                       className={`px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all border ${sub.status === s ? 'bg-terracotta text-white border-transparent shadow-sm' : 'bg-card border-[#ebdacc] text-text-main hover:border-terracotta'}`}
-                                    >
-                                      {s}
-                                    </button>
-                                  ))}
+                                
+                                {/* Events Timeline */}
+                                <div className="space-y-3 mb-6 pl-4 border-l-2 border-[#ebdacc] ml-2">
+                                  {(sub.events && sub.events.length > 0) ? sub.events.map((ev, i) => (
+                                    <div key={ev.id} className="relative flex items-center gap-3">
+                                      <div className="absolute -left-[21px] w-[10px] h-[10px] rounded-full bg-base border-[2px] border-terracotta" />
+                                      <span className="bg-base border border-line text-[11px] font-bold text-text-muted px-2 py-0.5 rounded-[6px]">{ev.status}</span>
+                                      <input 
+                                          type="date" 
+                                          value={ev.date} 
+                                          onChange={e => updateSubmissionEventDate(paper.id, sub.id, ev.id, e.target.value)} 
+                                          className="bg-transparent font-mono text-[13px] font-bold hover:bg-black/5 rounded outline-none p-0.5 cursor-pointer max-w-[130px] text-text-main" 
+                                      />
+                                      <button onClick={(e) => { e.stopPropagation(); deleteSubmissionEvent(paper.id, sub.id, ev.id); }} className="text-text-muted hover:text-terracotta ml-auto px-1">
+                                        <X size={14} className="transition-all"/>
+                                      </button>
+                                    </div>
+                                  )) : (
+                                    <div className="relative flex items-center gap-3">
+                                      <div className="absolute -left-[21px] w-[10px] h-[10px] rounded-full bg-base border-[2px] border-line" />
+                                      <span className="text-[13px] italic text-text-muted">暂无时间节点记录</span>
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                     })()}
+
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="text-[12px] font-bold text-text-muted flex items-center mr-2">新增状态:</span>
+                                  {['审稿中', '大修', '小修', '已录用', '拒稿', '其他'].map((s: any) => {
+    if (s === '其他' && customStatusInput?.paperId === paper.id && customStatusInput?.subId === sub.id) {
+       return (
+          <div key={s} className="flex items-center gap-1 bg-base border border-terracotta rounded-[8px] pl-2 overflow-hidden shadow-sm">
+            <input 
+              autoFocus 
+              value={customStatusInput.value} 
+              onChange={e => setCustomStatusInput({...customStatusInput, value: e.target.value})}
+              className="w-20 bg-transparent text-[12px] font-bold outline-none" 
+              placeholder="如: 终审"
+            />
+            <button 
+              onClick={() => {
+                if(customStatusInput.value.trim()){
+                   finishReviewStatus(paper.id, sub.id, customStatusInput.value.trim() as any);
+                }
+                setCustomStatusInput(null);
+              }}
+              className="bg-terracotta text-white px-2 py-1.5 text-[12px] font-bold hover:bg-terracotta-dark"
+            >确认</button>
+            <button onClick={() => setCustomStatusInput(null)} className="px-2 text-text-muted hover:text-terracotta"><X size={12}/></button>
+          </div>
+       );
+    }
+    return (
+      <button 
+         key={s} onClick={() => {
+           if(s === '其他') {
+             setCustomStatusInput({paperId: paper.id, subId: sub.id, value: ''});
+           } else {
+             finishReviewStatus(paper.id, sub.id, s);
+           }
+         }}
+         className={`px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all border ${sub.status === s ? 'bg-terracotta text-white border-transparent shadow-sm' : 'bg-card border-[#ebdacc] text-text-main hover:border-terracotta'}`}
+      >
+        {s}
+      </button>
+    );
+})}
+                                </div>
+                               </div>
+                             ))}
+                           </div>
+                         );
+                      })()}
                    </div>
                  )}
               </div>
@@ -570,27 +703,40 @@ export default function PaperProgress() {
                   <div className="p-6 md:p-8 animate-in slide-in-from-top-2 duration-300" onClick={e => e.stopPropagation()}>
                     <div className="mb-8">
                        <div className="flex justify-between items-center mb-4">
-                         <h4 className="text-[13px] font-bold text-text-muted uppercase tracking-wider">投稿历程 (仅展示录用期刊)</h4>
+                         <h4 className="text-[13px] font-bold text-text-muted uppercase tracking-wider">投稿历程</h4>
                          <span className="text-[12px] bg-sage/10 text-sage px-3 py-1 rounded-full font-bold">已录用刊物: {paper.submissions?.find(s => s.status === '已录用')?.venue || paper.targetVenue}</span>
                        </div>
-                       <div className="space-y-4 relative before:absolute before:left-[11px] before:top-4 before:bottom-4 before:w-[1.5px] before:bg-sage/20">
+                       <div className="space-y-4 pt-2">
                          {(() => {
-                           const acceptedSub = paper.submissions?.find(s => s.status === '已录用');
+                           const acceptedSub = paper.submissions?.find(s => s.status === '已录用' || s.status === '录用');
                            const relevantSubs = paper.submissions?.filter(s => s.venue === (acceptedSub?.venue || paper.targetVenue)) || [];
                            return relevantSubs.map((sub, idx) => (
-                             <div key={sub.id} className="relative pl-8 group">
-                               <div className={`absolute left-0 top-1.5 w-[22px] h-[22px] rounded-full flex items-center justify-center border-2 z-10 transition-colors shadow-sm ${sub.status === '已录用' ? 'bg-sage border-sage text-white' : 'bg-card border-line text-text-muted group-hover:border-sage/40'}`}>
-                                 {sub.status === '已录用' ? <CheckCircle2 size={12} /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
-                               </div>
-                               <div className="bg-base/40 p-4 rounded-[20px] border border-line/30 group-hover:border-sage/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
-                                 <div className="space-y-1">
-                                   <div className="font-bold text-[15px] text-text-main">{sub.venue}</div>
-                                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-text-muted font-medium">
-                                     <span className="flex items-center gap-1"><History size={12}/> 投递: {sub.submitDate}</span>
-                                     {sub.status === '已录用' && <span className="text-sage font-bold">最终录用</span>}
-                                   </div>
-                                 </div>
-                                 {renderPaperStatusBadge(sub.status)}
+                             <div key={sub.id} className="relative">
+                               <div className="bg-sage/5 p-4 rounded-[20px] border border-sage/10 relative group mb-4">
+                                  <div className="font-bold text-[15px] text-text-main mb-3">{sub.venue} 的时间线</div>
+                                  
+                                  <div className="space-y-3 pl-4 border-l-2 border-sage/20 ml-2">
+                                  {(sub.events && sub.events.length > 0) ? sub.events.map((ev, i) => (
+                                    <div key={ev.id} className="relative flex items-center gap-3">
+                                      <div className={`absolute -left-[21px] w-[10px] h-[10px] rounded-full bg-base border-[2px] ${ev.status === '已录用' || ev.status === '录用' ? 'border-sage' : 'border-[#ebdacc]'}`} />
+                                      <span className={`bg-base border border-line text-[11px] font-bold px-2 py-0.5 rounded-[6px] ${ev.status === '已录用' || ev.status === '录用' ? 'text-sage' : 'text-text-muted'}`}>{ev.status}</span>
+                                      <input 
+                                          type="date" 
+                                          value={ev.date} 
+                                          onChange={e => updateSubmissionEventDate(paper.id, sub.id, ev.id, e.target.value)} 
+                                          className="bg-transparent font-mono text-[13px] font-bold hover:bg-black/5 rounded outline-none p-0.5 cursor-pointer max-w-[130px] text-text-main" 
+                                      />
+                                      <button onClick={(e) => { e.stopPropagation(); deleteSubmissionEvent(paper.id, sub.id, ev.id); }} className="text-text-muted hover:text-terracotta ml-auto px-1">
+                                        <X size={14} className="transition-all"/>
+                                      </button>
+                                    </div>
+                                  )) : (
+                                    <div className="relative flex items-center gap-3">
+                                      <div className="absolute -left-[21px] w-[10px] h-[10px] rounded-full bg-base border-[2px] border-line" />
+                                      <span className="text-[13px] italic text-text-muted">暂无详细时间记录</span>
+                                    </div>
+                                  )}
+                                </div>
                                </div>
                              </div>
                            ));
@@ -619,47 +765,37 @@ export default function PaperProgress() {
                                    </div>
                                 ))}
                                 <div className="flex gap-2 items-center mt-2">
-                                  <input type="text" placeholder="项名 (如: DOI)" value={pubEditState.newFieldKey} onChange={e=>setPubEditState({...pubEditState, newFieldKey: e.target.value})} className="w-24 p-2 border rounded-[8px] text-[13px]"/>
-                                  <input type="text" placeholder="项值" value={pubEditState.newFieldValue} onChange={e=>setPubEditState({...pubEditState, newFieldValue: e.target.value})} className="flex-1 p-2 border rounded-[8px] text-[13px]"/>
+                                  <input type="text" placeholder="项名 (如: DOI)" value={pubEditState.newFieldKey} onChange={e=>setPubEditState({...pubEditState, newFieldKey: e.target.value})} className="flex-[1.5] min-w-0 p-2 border rounded-[8px] text-[13px]"/>
+                                  <input type="text" placeholder="项值" value={pubEditState.newFieldValue} onChange={e=>setPubEditState({...pubEditState, newFieldValue: e.target.value})} className="flex-1 min-w-0 p-2 border rounded-[8px] text-[13px]"/>
                                   <button onClick={() => { if(pubEditState.newFieldKey) setPubEditState({...pubEditState, customFields: {...pubEditState.customFields, [pubEditState.newFieldKey]: pubEditState.newFieldValue}, newFieldKey: '', newFieldValue: ''}) }} className="bg-line px-3 py-2 border rounded-[8px] text-[13px] hover:bg-line/80"><Plus size={14}/></button>
                                 </div>
                               </div>
                            </div>
                          ) : (
                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {(() => {
-                                 const accSub = paper.submissions?.find(s => s.status === '已录用') || paper.submissions?.[0];
-                                 return (
-                                   <div className="bg-sage/5 p-5 rounded-[24px] border border-sage/10 relative group flex flex-col gap-1.5">
-                                     <div className="text-[12px] text-sage font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">投稿关键时间线</div>
-                                     <div className="text-[13px] text-text-main font-bold flex justify-between">
-                                       <span>投递:</span> 
-                                       <span className="font-mono text-sage text-[14px]">
-                                          <input type="date" value={accSub?.submitDate || ''} onChange={e => { if(accSub) updateSubField(paper.id, accSub.id, 'submitDate', e.target.value) }} className="bg-transparent outline-none cursor-pointer text-right w-[125px] hover:bg-black/5 rounded" />
-                                       </span>
-                                     </div>
-                                     {accSub?.underReviewDate && (
-                                       <div className="text-[13px] text-text-main font-bold flex justify-between">
-                                         <span>外审:</span>
-                                         <span className="font-mono text-sage text-[14px]">
-                                            <input type="date" value={accSub.underReviewDate} onChange={e => updateSubField(paper.id, accSub.id, 'underReviewDate', e.target.value)} className="bg-transparent outline-none cursor-pointer text-right w-[125px] hover:bg-black/5 rounded" />
-                                         </span>
-                                       </div>
-                                     )}
-                                     {accSub?.revisionDate && (
-                                       <div className="text-[13px] text-text-main font-bold flex justify-between">
-                                         <span>返修:</span>
-                                         <span className="font-mono text-sage text-[14px]">
-                                            <input type="date" value={accSub.revisionDate} onChange={e => updateSubField(paper.id, accSub.id, 'revisionDate', e.target.value)} className="bg-transparent outline-none cursor-pointer text-right w-[125px] hover:bg-black/5 rounded" />
-                                         </span>
-                                       </div>
-                                     )}
-                                     <div className="text-[13px] text-text-muted mt-2 font-bold pt-3 border-t border-sage/10">{paper.targetVenue || accSub?.venue || '未归档'}</div>
-                                   </div>
-                                 );
-                              })()}
+                               {/* Replaced by robust timeline above */} 
                               <div className="bg-terracotta/5 p-5 rounded-[24px] border border-terracotta/10 relative group">
-                                <div className="text-[12px] text-terracotta font-bold uppercase tracking-wider mb-2 flex justify-between items-center"><span>发表时间 & 状态</span></div>
+                                <div className="text-[12px] text-terracotta font-bold uppercase tracking-wider mb-2 flex justify-between items-center">
+                                   <span>发表时间 & 状态</span>
+                                   <button 
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       setEditingPublishedId(paper.id);
+                                       setPubEditState({
+                                          title: paper.title,
+                                          venue: paper.targetVenue || '',
+                                          publishDate: paper.publishDate || '',
+                                          publishStatusNote: paper.publishStatusNote || '',
+                                          customFields: paper.customFields || {},
+                                          newFieldKey: '',
+                                          newFieldValue: ''
+                                       });
+                                     }}
+                                     className="bg-card border border-terracotta/20 text-terracotta hover:bg-white px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                                   >
+                                     <Edit3 size={14} /> 完善
+                                   </button>
+                                </div>
                                 <div className="space-y-0.5">
                                   <div className="text-[16px] font-bold text-text-main">{paper.publishDate || '暂未归档发表时间'}</div>
                                   <div className="text-[13px] text-text-muted font-bold">{paper.publishStatusNote || '正式录用 / 待出版'}</div>
@@ -676,48 +812,28 @@ export default function PaperProgress() {
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-3">
-                      {editingPublishedId === paper.id ? (
-                        <>
-                          <button 
-                            onClick={() => {
-                              updatePaper(paper.id, { 
-                                title: pubEditState.title,
-                                targetVenue: pubEditState.venue,
-                                publishDate: pubEditState.publishDate, 
-                                publishStatusNote: pubEditState.publishStatusNote,
-                                customFields: pubEditState.customFields
-                              });
-                              setEditingPublishedId(null);
-                            }}
-                            className="bg-sage text-white px-6 py-2.5 rounded-[12px] text-[14px] font-bold shadow-lg shadow-sage/20 hover:bg-sage-dark transition-all"
-                          >
-                            保存修改
-                          </button>
-                          <button onClick={() => setEditingPublishedId(null)} className="bg-line px-6 py-2.5 rounded-[12px] text-[14px] font-bold text-text-main hover:bg-line/80 transition-all">
-                            取消
-                          </button>
-                        </>
-                      ) : (
-                        <button 
-                          onClick={() => {
-                            setEditingPublishedId(paper.id);
-                            setPubEditState({
-                               title: paper.title,
-                               venue: paper.targetVenue || '',
-                               publishDate: paper.publishDate || '',
-                               publishStatusNote: paper.publishStatusNote || '',
-                               customFields: paper.customFields || {},
-                               newFieldKey: '',
-                               newFieldValue: ''
-                            });
-                          }}
-                          className="bg-card border border-line text-text-muted hover:text-text-main px-6 py-2.5 rounded-[12px] text-[14px] font-bold transition-all flex items-center gap-2 hover:border-text-muted/40 shadow-sm"
-                        >
-                          <Edit3 size={16} /> 完善信息
-                        </button>
-                      )}
-                    </div>
+                    {editingPublishedId === paper.id ? (
+                      <div className="flex justify-end gap-3">
+                         <button 
+                             onClick={() => {
+                               updatePaper(paper.id, { 
+                                 title: pubEditState.title,
+                                 targetVenue: pubEditState.venue,
+                                 publishDate: pubEditState.publishDate, 
+                                 publishStatusNote: pubEditState.publishStatusNote,
+                                 customFields: pubEditState.customFields
+                               });
+                               setEditingPublishedId(null);
+                             }}
+                             className="bg-sage text-white px-6 py-2.5 rounded-[12px] text-[14px] font-bold shadow-lg shadow-sage/20 hover:bg-sage-dark transition-all"
+                           >
+                             保存修改
+                           </button>
+                           <button onClick={() => setEditingPublishedId(null)} className="bg-line px-6 py-2.5 rounded-[12px] text-[14px] font-bold text-text-main hover:bg-line/80 transition-all">
+                             取消
+                           </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
              </div>

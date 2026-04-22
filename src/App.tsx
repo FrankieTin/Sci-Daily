@@ -81,7 +81,7 @@ function AppContent() {
                     {user?.photoURL ? <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" /> : <User size={16} />}
                   </div>
                   <span className="text-[14px] font-bold text-text-main group-hover:text-sage transition-colors">
-                    {user?.displayName?.split(' ')[0] || '账号模块'}
+                    {user?.displayName?.split(' ')[0] || '用户'}
                   </span>
                 </button>
               </div>

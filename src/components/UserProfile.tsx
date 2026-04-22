@@ -15,6 +15,47 @@ export default function UserProfile({ startWithSettings = false, onBackToMain }:
   const [newName, setNewName] = useState('');
   const { user, logout, updateProfileData } = useAuth();
   const { state, updateTheme } = useAppContext();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleUpdateAvatarClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 256;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+        } else {
+          if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        try {
+          await updateProfileData({ photoURL: dataUrl });
+        } catch (err) {
+          console.error(err);
+          alert('头像更新失败，请重试');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const currentTheme = state.theme || 'dustblue';
 
   const themes = [
@@ -52,17 +93,6 @@ export default function UserProfile({ startWithSettings = false, onBackToMain }:
     } catch (e) {
       console.error(e);
       alert('更新失败，请重试');
-    }
-  };
-
-  const handleUpdateAvatar = async () => {
-    const url = prompt('请输入您的头像图片链接 (URL):');
-    if (!url || !user) return;
-    try {
-      await updateProfileData({ photoURL: url });
-    } catch (e) {
-      console.error(e);
-      alert('更新失败');
     }
   };
 
@@ -136,7 +166,8 @@ export default function UserProfile({ startWithSettings = false, onBackToMain }:
         </button>
 
         <div className="bg-card rounded-card shadow-theme border border-line overflow-hidden p-8 flex flex-col items-center">
-          <div className="relative group cursor-pointer mb-8" onClick={handleUpdateAvatar}>
+          <div className="relative group cursor-pointer mb-8" onClick={handleUpdateAvatarClick}>
+            <input type="file" ref={fileInputRef} onChange={handleAvatarUpload} accept="image/*" className="hidden" />
             <div className="w-28 h-28 rounded-full bg-sage/20 border-4 border-sage flex items-center justify-center overflow-hidden">
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
@@ -241,7 +272,7 @@ export default function UserProfile({ startWithSettings = false, onBackToMain }:
       <div className="flex flex-col gap-3">
         {!user && (
           <button onClick={() => setShowLoginModal(true)} className="w-full bg-sage border border-sage text-white font-bold text-[16px] py-4 rounded-card shadow-sm hover:bg-sage-dark transition-colors flex justify-center items-center gap-2 group">
-            <LogIn size={18} className="group-hover:translate-x-1 transition-transform" /> 注册 / 登录分身
+            <LogIn size={18} className="group-hover:translate-x-1 transition-transform" /> 注册 / 登录
           </button>
         )}
         {user && (

@@ -33,7 +33,7 @@ interface AppContextType {
   deleteAchievement: (id: string) => void;
 }
 
-export const DEFAULT_TAB_ORDER = ['time', 'plan', 'paper', 'journal', 'fitness', 'achievements', 'user'];
+export const DEFAULT_TAB_ORDER = ['time', 'plan', 'fitness', 'papers', 'journal', 'achievements'];
 
 const defaultState: AppState = {
   visibleTabs: DEFAULT_TAB_ORDER,
@@ -62,6 +62,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (rawData) {
       try {
         const parsed = JSON.parse(rawData);
+        
+        // Migration: ensure 'paper' is renamed to 'papers' and we don't randomly hide tabs initially due to old data
+        // Resetting to DEFAULT_TAB_ORDER to guarantee all are visible & in the exact requested order
+        parsed.visibleTabs = [...DEFAULT_TAB_ORDER];
+
         const merged = { ...defaultState, ...parsed };
         setState(merged);
         if (merged.theme) document.documentElement.setAttribute('data-theme', merged.theme);
