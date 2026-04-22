@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Serif+SC:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-base: var(--base);
+  --color-card: var(--card);
+  --color-sage: var(--primary);
+  --color-sage-dark: var(--primary-dark);
+  --color-terracotta: var(--secondary);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+  --color-line: var(--line);
+
+  --font-serif: 'Noto Serif SC', 'Georgia', ui-serif, Cambria, "Times New Roman", Times, serif;
+  --font-sans: 'Outfit', 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Outfit', ui-monospace, SFMono-Regular, monospace;
+
+  --radius-card: 24px;
+  --shadow-theme: 0 4px 12px rgba(0,0,0,0.02);
+}
+
+:root {
+  /* Default: Morandi Dustblue */
+  --base: #F0F4F7;
+  --card: #FFFFFF;
+  --primary: #7E96A0;
+  --primary-dark: #667d87;
+  --secondary: #D49B8B;
+  --text-main: #3D3D3D;
+  --text-muted: #8C8C8C;
+  --line: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='terracotta'] {
+  --base: #FDF4F0;
+  --primary: #B97A67;
+  --primary-dark: #a36957;
+  --secondary: #7B8A74;
+}
+
+[data-theme='dustblue'] {
+  --base: #F0F4F7;
+  --primary: #7E96A0;
+  --primary-dark: #667d87;
+  --secondary: #D49B8B;
+}
+
+[data-theme='mauve'] {
+  --base: #F5F0F5;
+  --primary: #9A86A4;
+  --primary-dark: #816e8b;
+  --secondary: #ACB494;
+}
+
+[data-theme='warmgrey'] {
+  --base: #F2F2F2;
+  --primary: #8C8C8C;
+  --primary-dark: #737373;
+  --secondary: #B97A67;
+}
+
+[data-theme='matcha'] {
+  --base: #F3F5F0;
+  --primary: #8AA382;
+  --primary-dark: #768d6f;
+  --secondary: #D49B8B;
+}
+
+[data-theme='mistyrose'] {
+  --base: #F9F1F1;
+  --primary: #C9A0A0;
+  --primary-dark: #b38d8d;
+  --secondary: #8AA382;
+}
+
+[data-theme='slate'] {
+  --base: #F0F2F4;
+  --primary: #788591;
+  --primary-dark: #65717b;
+  --secondary: #C9A0A0;
+}
+
+[data-theme='caramel'] {
+  --base: #F7F3F0;
+  --primary: #A68B7C;
+  --primary-dark: #8f776a;
+  --secondary: #788591;
+}
+
+/* Minimalist Themes */
+[data-theme='pure'] {
+  --base: #FFFFFF;
+  --primary: #2D2D2D;
+  --primary-dark: #000000;
+  --secondary: #717171;
+}
+
+[data-theme='charcoal'] {
+  --base: #F5F5F5;
+  --primary: #333333;
+  --primary-dark: #111111;
+  --secondary: #999999;
+}
+
+[data-theme='linen'] {
+  --base: #FAF9F6;
+  --primary: #5F5F5F;
+  --primary-dark: #3F3F3F;
+  --secondary: #A09E96;
+}
+
+[data-theme='nordic'] {
+  --base: #F0F4F2;
+  --primary: #4A5D5E;
+  --primary-dark: #2C3A3B;
+  --secondary: #8BA09B;
+}
+
+[data-theme='ivory'] {
+  --base: #FFFAF0;
+  --primary: #4D4D4D;
+  --primary-dark: #2D2D2D;
+  --secondary: #D4AF37;
+}
+
+[data-theme='ebony'] {
+  --base: #121212;
+  --card: #1E1E1E;
+  --primary: #E0E0E0;
+  --primary-dark: #FFFFFF;
+  --secondary: #555555;
+  --text-main: #E0E0E0;
+  --text-muted: #888888;
+  --line: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='clay'] {
+  --base: #E8E4E1;
+  --primary: #6E5F53;
+  --primary-dark: #4D4238;
+  --secondary: #A68B7C;
+}
+
+[data-theme='stone'] {
+  --base: #EBEBEB;
+  --primary: #525252;
+  --primary-dark: #333333;
+  --secondary: #999999;
+}
+
+[data-theme='mousse'] {
+  --base: #F5EFEB;
+  --primary: #6B4E3D;
+  --primary-dark: #4A3529;
+  --secondary: #BFA89E;
+}
+
+[data-theme='sage'] {
+  --base: #F5F2ED;
+  --primary: #7B8A74;
+  --primary-dark: #64735c;
+  --secondary: #B97A67;
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-text-main);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
